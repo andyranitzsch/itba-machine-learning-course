@@ -46,23 +46,69 @@ resumen.sort_values("% nulos", ascending=False)""")
 code("""# Regiones (l2) presentes en el dataset: cuántas filas hay de cada una
 df_raw["l2"].value_counts(dropna=False).rename_axis("l2").rename("publicaciones").to_frame()""")
 
+code("""# ¿Contenido de l4, l5 y l6? Se mira cobertura total Y cobertura dentro de CABA
+caba = df_raw[df_raw["l2"] == "Capital Federal"]
+
+resumen_geo = pd.DataFrame({
+    "valores únicos": [df_raw[c].nunique(dropna=True) for c in ["l4", "l5", "l6"]],
+    "filas con dato": [int(df_raw[c].notna().sum()) for c in ["l4", "l5", "l6"]],
+    "% nulo": [(df_raw[c].isna().mean() * 100).round(1) for c in ["l4", "l5", "l6"]],
+    "filas con dato en CABA": [int(caba[c].notna().sum()) for c in ["l4", "l5", "l6"]],
+}, index=["l4", "l5", "l6"])
+print(resumen_geo)
+print()
+print("Top de valores de l4 (todo el dataset):")
+print(df_raw["l4"].value_counts().head(6))
+print()
+print("l4 dentro de CABA (sub-barrios, solo 10.091 filas):")
+print(caba["l4"].value_counts().head(6))
+print()
+print("l5 — 21 valores en total, ninguno cae en CABA:")
+print(df_raw["l5"].value_counts().head(6))""")
+
+code("""# ¿Qué hay en title/description? Evidencia de encoding dañado y HTML embebido
+def con_bytes_rotos(s):
+    return isinstance(s, str) and "\\ufffd" in s
+
+titulos = df_raw["title"].dropna()
+descs = df_raw["description"].dropna()
+rotos_t = titulos[titulos.map(con_bytes_rotos)]
+rotos_d = descs[descs.map(con_bytes_rotos)]
+
+print(f"Titles con bytes rotos: {len(rotos_t):,} / {len(titulos):,}")
+print(f"Descriptions con bytes rotos: {len(rotos_d):,} / {len(descs):,}")
+print()
+print("Ejemplo de title (repr escapado):")
+print(ascii(rotos_t.iloc[0]))
+print()
+print("Ejemplo de description: contexto alrededor del primer byte perdido:")
+ejemplo = rotos_d.iloc[0]
+pos = ejemplo.find("\\ufffd")
+print(ascii(ejemplo[max(0, pos - 90):pos + 60]))""")
+
 md("""### Decisiones de alcance previas a explorar
 
-1. **Filtrar por `l2 == "Capital Federal"`**: el objetivo del TP es predecir precios *en Capital Federal*. Mezclar otras provincias introduce variación de precio por mercado (distinta demanda, distinta moneda de referencia) que no queremos modelar. En la celda anterior se ven las regiones disponibles: Capital Federal concentra 249.738 de 992.192 publicaciones.
+1. **Filtrar por `l2 == "Capital Federal"`**: el objetivo del TP (Trabajo Práctico) es predecir precios *en Capital Federal* (CABA: Ciudad Autónoma de Buenos Aires). Mezclar otras provincias introduce variación de precio por mercado (distinta demanda, distinta moneda de referencia) que no queremos modelar. En la celda de regiones (`l2`) se ven las disponibles: Capital Federal concentra 249.738 de 992.192 publicaciones.
 2. **Filtrar por `operation_type == "Venta"`**: hay publicaciones de alquiler y alquiler temporal. La variable objetivo es precio de *venta*; alquilar y vender son problemas distintos y las columnas no son comparables entre sí.
-3. **Filtrar por `currency == "USD"`**: en el dataset conviven USD, ARS y nulls. En CABA/Venta: 169.054 USD, 1.742 ARS y 6.315 sin moneda. Convertir ARS a USD exigiría un tipo de cambio histórico por fecha de publicación (no disponible y sujeto a brecha cambiaria). Descartar esos ~8k registros (menos del 5%) es más limpio que una conversión aproximada.
-4. **Se descartan `l4`, `l5`, `l6`**: 77%, 99% y 100% nulos respectivamente; no aportan.
-5. **Se descartan `title` y `description`**: texto libre con encoding dañado. Podrían usarse con NLP, pero está fuera del alcance del TP y no aportan a un modelo tabular básico.""")
+3. **Filtrar por `currency == "USD"`**: en el dataset conviven USD (dólares estadounidenses), ARS (pesos argentinos) y nulls. En CABA/Venta: 169.054 USD, 1.742 ARS y 6.315 sin moneda. Convertir ARS a USD exigiría un tipo de cambio histórico por fecha de publicación (no disponible y sujeto a brecha cambiaria). Descartar esos ~8k registros (menos del 5%) es más limpio que una conversión aproximada. Procedemos a descartar los **8.057** registros.
+4. **Se descartan `l4`, `l5`, `l6`** (coberturas y valores en la celda anterior):
+   - `l6`: **100% nulo, 0 valores únicos**. Columna completamente vacía.
+   - `l5`: 99,5% nulo; 21 valores en total ("Barrio Los Alisos", "Barrio El Golf"... son barrios privados del GBA (Gran Buenos Aires)) y **0 filas con dato dentro de CABA**. No aplica al universo del TP.
+   - `l4`: 77% nulo. En CABA solo **10.091 filas (4,0%)** tienen dato, y **todas son de Palermo** (Palermo Hollywood/Soho/Chico/Viejo). El contenido es más fino que `l3`, pero con 4% de cobertura concentrada en un solo barrio no se puede usar sin inventar datos para el resto. Se descarta por **cobertura sesgada**, no por contenido.
+5. **Se descartan `title` y `description`**: son texto libre; no aplicaremos NLP (*Natural Language Processing*, Procesamiento de Lenguaje Natural) en este TP y no aportan a un modelo tabular básico (la celda anterior muestra qué contienen).""")
 
-code("""print("Antes del filtro:", df_raw.shape)
+code("""print("Dataset completo:", df_raw.shape)
 
-df = df_raw[
+caba_venta = df_raw[
     (df_raw["l2"] == "Capital Federal")
     & (df_raw["operation_type"] == "Venta")
-    & (df_raw["currency"] == "USD")
 ].copy()
+print("CABA + Venta:", caba_venta.shape)
 
-print("Después del filtro (CABA + Venta + USD):", df.shape)
+df = caba_venta[caba_venta["currency"] == "USD"].copy()
+descartados = len(caba_venta) - len(df)
+print(f"Descartados por currency != USD: {descartados:,}")
+print("Final (CABA + Venta + USD):", df.shape)
 print()
 print("Precio (USD):")
 print(df["price"].describe())""")
@@ -84,7 +130,7 @@ Seis gráficos, cada uno con una pregunta distinta:
 
 md("""### Gráfico 1 — Distribución de precios (histograma, escala logarítmica)
 
-**Por qué:** el precio es la variable objetivo. Conocer su distribución define casi todo lo demás: qué métrica conviene (si hay cola larga, el RMSE la penaliza de más), si conviene escalar o transformar, y si hay valores absurdos.
+**Por qué:** el precio es la variable objetivo. Conocer su distribución define casi todo lo demás: qué métrica conviene (si hay cola larga, el RMSE — *Root Mean Squared Error*, raíz del error cuadrático medio — la penaliza de más), si conviene escalar o transformar, y si hay valores absurdos.
 
 **Qué espero descubrir:** precios inmobiliarios suelen tener distribución sesgada a la derecha (pocas propiedades muy caras). La escala logarítmica permite ver la forma real de la cola.""")
 
@@ -102,14 +148,15 @@ plt.tight_layout()
 plt.show()""")
 
 md("""**Qué descubrí:**
-- Distribución **sesgada a la derecha**: mediana 160.000 USD vs media 285.000 USD. La media la tiran las pocas propiedades muy caras.
+- Distribución **sesgada a la derecha**: mediana 160.000 USD vs media 285.000 USD. La media es afectada por las pocas propiedades muy caras.
+- Este sesgo es lo esperado en un mercado inmobiliario: pocos inmuebles premium estiran la cola y la masa se concentra en un rango medio.
 - Cola derecha que llega hasta ~30 millones de USD.
-- Pico secundario alrededor de 10.000–40.000 USD: probablemente cocheras, cocheras y locales chicos mezclados en la misma distribución.
-- **Implicancia para el TP:** la distribución no es simétrica. Eso favorece una métrica robusta como MAE (no la media de errores al cuadrado, muy sensible a la cola) y abre la puerta a modelar `log(price)` en vez de `price` crudo.""")
+- Pico secundario alrededor de 10.000–40.000 USD: probablemente cocheras y locales chicos mezclados en la misma distribución.
+- **Implicancia para el TP:** la distribución no es simétrica. Eso favorece una métrica robusta como el MAE — *Mean Absolute Error*, error absoluto medio (no la media de errores al cuadrado, muy sensible a la cola).""")
 
 md("""### Gráfico 2 — Cantidad de publicaciones por tipo de propiedad
 
-**Por qué:** `property_type` es una categórica con alta probabilidad de ser feature. Antes de usarla, hay que saber si todos los tipos tienen muestra suficiente.
+**Por qué:** `property_type` es una variable categórica con alta probabilidad de ser feature. Antes de usarla, hay que saber si todos los tipos tienen suficientes muestras.
 
 **Qué espero descubrir:** si el dataset está dominado por departamentos, y si hay tipos con tan pocos registros que convenga agruparlos o descartarlos.""")
 
@@ -189,7 +236,7 @@ plt.show()""")
 md("""**Qué descubrí:**
 - Relación **positiva pero ruidosa**: a más superficie, más precio, con mucha dispersión.
 - **Heterocedasticidad**: la dispersión del precio crece con la superficie (y con el precio mismo). Esto castiga a la Regresión Lineal en los valores altos.
-- El primer intento de este gráfico fue **ilegible**: un outlier de 63.000 m2 comprimía todo el eje X. Recortar la vista al P99 (línea punteada) hizo visible la forma real. Los outliers siguen existiendo en el dataset: esto es solo una decisión de visualización, no de limpieza.
+- El primer intento de este gráfico fue **ilegible**: un outlier de 63.000 m2 comprimía todo el eje X. Recortar la vista al P99 (percentil 99, línea punteada) hizo visible la forma real. Los outliers siguen existiendo en el dataset: esto es solo una decisión de visualización, no de limpieza.
 - Hay puntos con superficie casi 0: otro indicio de datos mal cargados para la parte 1b.""")
 
 md("""### Gráfico 5 — Matriz de correlación de las numéricas

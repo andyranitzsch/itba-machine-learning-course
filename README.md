@@ -1,7 +1,7 @@
 # 🏠 Predicting Property Prices in Buenos Aires
 
 > **Machine Learning Engineering — ITBA**
-> End-to-end ML pipeline: from raw real-estate listings to a tuned Random Forest that predicts property prices in **Capital Federal**.
+> End-to-end machine learning (ML) pipeline: from raw real-estate listings to a tuned Random Forest that predicts property prices in **Capital Federal**.
 
 ![Python](https://img.shields.io/badge/Python-3.13-3776AB?style=flat-square&logo=python&logoColor=white)
 ![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-F37626?style=flat-square&logo=jupyter&logoColor=white)
@@ -19,9 +19,9 @@ Working on it means touching every stage a machine learning engineer faces in th
 
 | Stage | What you build | What you learn |
 |-------|----------------|----------------|
-| 🔍 **EDA** | 6 justified visualizations | Read a 1M-row dataset before modeling it |
-| 🛠️ **Feature engineering** | Missing-data policy, outlier detection (IQR/Z-score), one-hot encoding | Every cleaning decision needs a reason, not a habit |
-| 📐 **Metrics** | Choose and justify MAE | Why error metrics break on skewed targets |
+| 🔍 **EDA** (Exploratory Data Analysis) | 6 justified visualizations | Read a 1M-row dataset before modeling it |
+| 🛠️ **Feature engineering** | Missing-data policy, outlier detection (IQR — Interquartile Range — / Z-score), one-hot encoding | Every cleaning decision needs a reason, not a habit |
+| 📐 **Metrics** | Choose and justify MAE (Mean Absolute Error) | Why error metrics break on skewed targets |
 | 🤖 **Modeling** | Linear Regression vs Random Forest | When a linear model is not enough |
 | 🎛️ **Tuning** | `GridSearchCV` | What hyperparameters actually do to performance |
 | 📝 **Conclusions** | Model recommendation | Trade-offs & interpretability over raw scores |
@@ -49,7 +49,7 @@ It is **not included in this repo** (862 MB — GitHub blocks files over 100 MB)
 properati.csv   ← same folder as TP_MLE.ipynb
 ```
 
-**What the notebook does with it:** filter to *Capital Federal · Venta · USD* (~169k rows), then explore, clean, transform, model and evaluate.
+**What the notebook does with it:** filter to *Capital Federal · Venta · USD (US dollars)* (~169k rows), then explore, clean, transform, model and evaluate.
 
 ## 🚀 Getting started
 
