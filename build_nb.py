@@ -43,9 +43,12 @@ code("""resumen = pd.DataFrame({
 resumen["% nulos"] = (resumen["nulos"] / len(df_raw) * 100).round(2)
 resumen.sort_values("% nulos", ascending=False)""")
 
+code("""# Regiones (l2) presentes en el dataset: cuántas filas hay de cada una
+df_raw["l2"].value_counts(dropna=False).rename_axis("l2").rename("publicaciones").to_frame()""")
+
 md("""### Decisiones de alcance previas a explorar
 
-1. **Filtrar por `l2 == "Capital Federal"`**: el objetivo del TP es predecir precios *en Capital Federal*. Mezclar otras provincias introduce variación de precio por mercado (distinta demanda, distinta moneda de referencia) que no queremos modelar.
+1. **Filtrar por `l2 == "Capital Federal"`**: el objetivo del TP es predecir precios *en Capital Federal*. Mezclar otras provincias introduce variación de precio por mercado (distinta demanda, distinta moneda de referencia) que no queremos modelar. En la celda anterior se ven las regiones disponibles: Capital Federal concentra 249.738 de 992.192 publicaciones.
 2. **Filtrar por `operation_type == "Venta"`**: hay publicaciones de alquiler y alquiler temporal. La variable objetivo es precio de *venta*; alquilar y vender son problemas distintos y las columnas no son comparables entre sí.
 3. **Filtrar por `currency == "USD"`**: en el dataset conviven USD, ARS y nulls. En CABA/Venta: 169.054 USD, 1.742 ARS y 6.315 sin moneda. Convertir ARS a USD exigiría un tipo de cambio histórico por fecha de publicación (no disponible y sujeto a brecha cambiaria). Descartar esos ~8k registros (menos del 5%) es más limpio que una conversión aproximada.
 4. **Se descartan `l4`, `l5`, `l6`**: 77%, 99% y 100% nulos respectivamente; no aportan.
