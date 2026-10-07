@@ -1,0 +1,11 @@
+# Dataset (862 MB — supera el límite de GitHub de 100 MB por archivo)
+properati.csv
+
+# Material del curso (copyright ITBA)
+Clases/
+
+# Artefactos temporales
+imgs/
+__pycache__/
+.ipynb_checkpoints/
+*.pyc
