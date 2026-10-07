@@ -43,9 +43,7 @@ Working on it means touching every stage a machine learning engineer faces in th
 
 `properati.csv` contains **~992,000 real-estate listings** from Argentina with location, surface area, rooms and price, among other variables.
 
-It is **not included in this repo** (862 MB — GitHub blocks files over 100 MB). Download it here and drop it in the project root:
-
-**⬇️ [properati.csv — Google Drive](https://drive.google.com/file/d/1o2P0Mg5mZgMZysrPHC8GKmwIg_QTzzN7/view)**
+It is **not included in this repo** (862 MB — GitHub blocks files over 100 MB). Download it from **[Properati Open Data](https://www.properati.com.ar/open-data)** (the `properati.csv` file) and drop it in the project root:
 
 ```
 properati.csv   ← same folder as TP_MLE.ipynb
