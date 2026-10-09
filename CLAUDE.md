@@ -48,4 +48,4 @@ Restricciones de diseño que hay que preservar al editar:
 
 - `.gitignore` excluye `properati.csv`, `Clases/` (PDFs con copyright), `imgs/`, `.agents/`, `skills-lock.json`. `Clases_txt/` (texto extraído de las clases, material de referencia, no parte del TP) sí está versionado.
 - Las cifras citadas en los markdowns (filas, features, métricas) dependen de la ejecución: si cambia la limpieza de 1b, re-ejecutar y actualizar los textos de 1b, 1c, 2b, 2c y `HANDOFF.md`.
-- Rama principal: `master`.
+- Rama principal: `main`.
