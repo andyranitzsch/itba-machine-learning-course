@@ -15,6 +15,8 @@
 
 This repository holds the solution to the final assignment of the Machine Learning Engineering course: **predict the sale price of properties in Buenos Aires (Capital Federal)** using the full lifecycle of a real ML project.
 
+📄 **Assignment brief (original, in Spanish):** [`ENUNCIADO.md`](ENUNCIADO.md)
+
 Working on it means touching every stage a machine learning engineer faces in the wild:
 
 | Stage | What you build | What you learn |
