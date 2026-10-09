@@ -35,8 +35,10 @@ Working on it means touching every stage a machine learning engineer faces in th
 ```
 .
 ├── TP_MLE.ipynb        # 📓 The assignment — full pipeline, run end-to-end
-├── build_nb.py         # 🔧 Script that regenerates the notebook (optional)
+├── nbpatch.py          # 🔧 Helper to patch notebook cells in place (no full regeneration)
+├── extract_clases.py   # 🔧 Extracts the class PDFs in Clases/ to Markdown in Clases_txt/
 ├── requirements.txt    # 📦 Python dependencies
+├── ENUNCIADO.md        # 📄 Assignment brief (original, Spanish)
 ├── properati.csv       # ⬇️  Dataset — download it yourself (see below)
 └── README.md
 ```
