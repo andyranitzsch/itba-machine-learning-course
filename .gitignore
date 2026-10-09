@@ -9,3 +9,9 @@ imgs/
 __pycache__/
 .ipynb_checkpoints/
 *.pyc
+
+# Herramientas locales
+.agents/
+skills-lock.json
+__pycache__/
+
