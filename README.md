@@ -21,7 +21,7 @@ Working on it means touching every stage a machine learning engineer faces in th
 
 | Stage | What you build | What you learn |
 |-------|----------------|----------------|
-| 🔍 **EDA** (Exploratory Data Analysis) | 6 justified visualizations | Read a 1M-row dataset before modeling it |
+| 🔍 **EDA** (Exploratory Data Analysis) | 7 justified visualizations | Read a 1M-row dataset before modeling it |
 | 🛠️ **Feature engineering** | Missing-data policy, outlier detection (IQR — Interquartile Range — / Z-score), one-hot encoding | Every cleaning decision needs a reason, not a habit |
 | 📐 **Metrics** | Choose and justify MAE (Mean Absolute Error) | Why error metrics break on skewed targets |
 | 🤖 **Modeling** | Linear Regression vs Random Forest | When a linear model is not enough |
@@ -53,7 +53,7 @@ It is **not included in this repo** (862 MB — GitHub blocks files over 100 MB)
 properati.csv   ← same folder as TP_MLE.ipynb
 ```
 
-**What the notebook does with it:** filter to *Capital Federal · Venta · USD (US dollars)* (~169k rows), then explore, clean, transform, model and evaluate.
+**What the notebook does with it:** filter to *Capital Federal · Venta · USD (US dollars)* (~169k rows, ~167k after cleaning), then explore, clean, transform, model and evaluate.
 
 ## 🚀 Getting started
 
