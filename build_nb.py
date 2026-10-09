@@ -537,7 +537,7 @@ md("""---
 
 ### Qué descubrí del dataset
 
-- **Alcance**: de 992.192 publicaciones originales se trabajan las **166.652** de Capital Federal, operación Venta y moneda USD, con **80 features**: 6 numéricas de entrada, coordenadas, 3 indicadoras de imputación, 68 columnas One-Hot (tipo de propiedad y barrio). Cero nulos en la matriz final.
+- **Alcance**: de 992.192 publicaciones originales se trabajan las **166.652** de Capital Federal, operación Venta y moneda USD, con **79 features**: 69 columnas One-Hot (10 tipos de propiedad + 59 barrios), 7 numéricas (superficie total y cubierta, proporción cubierta, ambientes, baños, latitud y longitud) y 3 indicadoras de imputación. Cero nulos en la matriz final.
 - **El mercado segmentado manda**: el target tiene mediana de 160.000 USD y media de 285.000 USD (sesgo esperado en un mercado inmobiliario: ~10% de las propiedades supera el límite superior del IQR, 562.500 USD). El tipo de propiedad separa rangos que casi no se solapan, y el barrio es la señal territorial más fuerte: 7,4x entre la mediana de Puerto Madero y la de Villa Lugano.
 - **Las features físicas importan, con ruido**: superficie, ambientes y baños correlacionan positivamente con el precio, pero con heterocedasticidad (la dispersión crece con el valor). La lat/lon lineal pesa poco; el barrio como categoría pesa más.
 - **La calidad de los datos era baja y dirigió las decisiones**: `lat`/`lon` invertidas, monedas mezcladas (8.057 registros descartados), textos con *encoding* dañado, centinela `9999-12-31` en `end_date`, columnas constantes y sub-barrio (`l4`) con cobertura sesgada.
@@ -568,6 +568,71 @@ print(f"MAE predecir siempre la media:  {mean_absolute_error(y, pred_media):,.0f
 print(f"MSE del predictor de mediana:    {mean_squared_error(y, pred_mediana):,.0f}")
 print("-> Cualquier modelo debe bajar de estos valores de referencia.")
 """)
+
+md("""---
+
+## Parte 2 a) — Modelos
+
+**División entrenamiento/prueba**: 80% / 20% con semilla fija (`random_state=42`). El split es aleatorio simple (no estratificado, porque el target es continuo). Quedan ~133.000 filas para entrenar y ~33.000 para evaluar: el test nunca se usa para entrenar ni para elegir hiperparámetros (eso es validación cruzada, punto 2b).
+
+**Métricas**: las definidas en 1c — MAE como principal, RMSE como secundaria y R² como referencia contra la línea de base. Todos los modelos se comparan con las mismas métricas sobre el mismo test.""")
+
+code("""from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.dummy import DummyRegressor
+from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+
+X = df_ml.drop(columns=["price"])
+y = df_ml["price"]
+
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=RANDOM_STATE
+)
+print("Entrenamiento:", X_train.shape, "| Prueba:", X_test.shape)
+
+
+def reportar(nombre, y_true, y_pred):
+    mae = mean_absolute_error(y_true, y_pred)
+    rmse = mean_squared_error(y_true, y_pred) ** 0.5
+    print(f"{nombre:<28} MAE {mae:>10,.0f} USD | RMSE {rmse:>10,.0f} | R2 {r2_score(y_true, y_pred):.3f}")
+
+
+# Línea de base: predecir siempre la mediana de entrenamiento
+dummy = DummyRegressor(strategy="median").fit(X_train, y_train)
+reportar("Baseline (mediana)", y_train, dummy.predict(X_train))
+reportar("Baseline (mediana) TEST", y_test, dummy.predict(X_test))""")
+
+md("""**Regresión Lineal**: el primer modelo, sin escalado porque no usa regularización (los coeficientes no cambian por la escala de los regresores). Sirve de referencia honesta: si un modelo más complejo no le gana, no aporta.""")
+
+code("""lr = LinearRegression().fit(X_train, y_train)
+
+reportar("Regresión Lineal train", y_train, lr.predict(X_train))
+reportar("Regresión Lineal test", y_test, lr.predict(X_test))""")
+
+md("""**Random Forest**: hiperparámetros elegidos y justificados (los nombres, de la Clase 5):
+
+| Hiperparámetro | Valor | Por qué |
+|---|---|---|
+| `n_estimators` | 100 | El default y un piso razonable: más árboles bajan la varianza del ensemble a costa de tiempo; con 100 ya es estable |
+| `max_depth` | 20 | Limita la profundidad: con muestra tan grande, sin tope cada árbol memoriza hojas de 1 fila |
+| `min_samples_leaf` | 5 | Ninguna hoja con menos de 5 propiedades: obliga a generalizar y suaviza el overfit |
+| `max_features` | `sqrt` | Cada split ve ~9 de las 80 features: árboles menos correlacionados entre sí, gana el ensemble |
+| `n_jobs` | -1 | Entrena en paralelo (no cambia el modelo, solo el tiempo) |
+
+`random_state=42` para que el resultado sea reproducible.""")
+
+code("""rf = RandomForestRegressor(
+    n_estimators=100,
+    max_depth=20,
+    min_samples_leaf=5,
+    max_features="sqrt",
+    n_jobs=-1,
+    random_state=RANDOM_STATE,
+).fit(X_train, y_train)
+
+reportar("Random Forest train", y_train, rf.predict(X_train))
+reportar("Random Forest test", y_test, rf.predict(X_test))""")
 
 nb["cells"] = cells
 nb.metadata = {
