@@ -356,6 +356,181 @@ md("""**Observaciones:**
 - Parque Patricios aparece con mediana alta (215.000 USD, por encima de lo esperable para la zona): mezcla desarrollos nuevos y lotes. Revisar junto a `surface_*` en la Parte 1b.
 - En una misma ciudad conviven mercados con precios 7x distintos: `l3` es candidata de primera línea para One-Hot Encoding en la Parte 1b.""")
 
+md("""---
+
+## Parte 1 b) — Ingeniería de características
+
+### b.1) Datos faltantes o mal ingresados""")
+
+md("""**Diagnóstico:** la tabla siguiente muestra los nulos que quedan tras el filtro de alcance. Como se ve, el 33% de las filas no tiene *ninguna* de las dos superficies, `bedrooms` supera el 50% de nulos y `l3` tiene ~11,5%. El target (`price`) no tiene nulos.""")
+
+code("""columnas = ["price", "lat", "lon", "l3", "rooms", "bedrooms", "bathrooms",
+            "surface_total", "surface_covered", "property_type"]
+
+faltantes = pd.DataFrame({
+    "nulos": df[columnas].isna().sum(),
+    "% nulos": (df[columnas].isna().mean() * 100).round(1),
+}).sort_values("% nulos", ascending=False)
+faltantes""")
+
+code("""# Mal ingresados: situaciones imposibles o incoherentes, no meros faltantes
+print("Precios por debajo de 5.000 USD:", (df["price"] < 5000).sum())
+print("Superficie total <= 0:", (df["surface_total"] <= 0).sum())
+print("Superficie total < 15 m2:", ((df["surface_total"] > 0) & (df["surface_total"] < 15)).sum())
+print("Superficie cubierta > superficie total:", (df["surface_covered"] > df["surface_total"]).sum())
+print("Coordenadas nulas:", (df["lat"].isna() | df["lon"].isna()).sum())
+print("end_date con centinela 9999-12-31:", (df["end_date"] == "9999-12-31").sum())
+print("Publicaciones sin filas duplicadas:", df.duplicated().sum() == 0, "| ids repetidos:", df["id"].duplicated().sum())
+print("Columnas constantes: ad_type, l1, l2, operation_type, currency (un solo valor cada una)")
+
+# z-score vs IQR: con datos tan sesgados, el z-score paga doble
+s = df["surface_total"].dropna()
+z = (s - s.mean()) / s.std()
+print("Superficies con |z| > 3:", (z.abs() > 3).sum(), "— el z-score usa media y desvío, que los propios outliers inflan")
+""")
+
+md("""**Decisiones** (cada una con su justificación):
+
+1. **`bedrooms` (83.888 nulos, 50%)**: se descarta la columna. `rooms` y `bedrooms` correlacionan 0,91 (gráfico 5), `rooms` tiene la mitad de nulos y correlaciona más con el precio (0,38 vs 0,19). Con una de las dos alcanza y se evita duplicar información (multicolinealidad en la Regresión Lineal).
+2. **`rooms` (55.585 nulos) y `bathrooms` (26.632)**: **sustitución por mediana por tipo de propiedad** (estrategia de la Clase 3), más columnas indicadoras (`*_missing`). La mediana, no la media, porque son variables discretas de escala corta (1, 2, 3 ambientes): la media inventaría valores como 2,4 ambientes. La segmentación por tipo importa: la mediana global de `rooms` es 3, pero la de una cochera es 1 — sin segmentar, toda cochera sin dato quedaría con 3 ambientes. La clase advierte que este método reduce la varianza y deprime las correlaciones: las columnas indicadoras y conservar el resto de las features lo mitigan en parte. El indicador preserva la información *"este dato no estaba"*, que puede correlacionar con el precio.
+3. **`surface_total` / `surface_covered` (60.638 / 64.514 nulos; 55.755 filas sin ninguna de las dos)**: **sustitución por mediana por tipo de propiedad**, no se descartan filas (la clase desaconseja eliminar salvo faltantes MCAR): perder el 33% de los datos es peor que estimar el valor ausente. Antes de imputar se corrigen dos inconsistencias de carga: (a) si `surface_covered` > `surface_total` (1.141 filas) es imposible, y se toma el cubierto como nuevo total; (b) si falta el total pero existe el cubierto, se copia el cubierto al total (el cubierto siempre es piso del total, así que el dato queda subestimado a lo sumo). Los casos restantes se imputan con la mediana por tipo y se marca `surface_missing`.
+4. **Mal ingresados eliminatorios**: precio < 5.000 USD (1 fila, imposible para CABA) y superficies de 0 m2 o menores a 15 m2 (1.156 filas) se tratan como carga errónea: pasan a NaN y luego se imputan con el resto.
+5. **Coordenadas**: **Cold Deck** (deducción por relación lógica, el ejemplo canónico de la Clase 3). Se corrige la inversión `lat`/`lon` detectada en 1a, se eliminan las publicaciones fuera del rectángulo de CABA (~0,1%) y los 24.224 nulos se rellenan con la mediana de su barrio, no con la mediana global (así la coordenada imputada apunta al barrio correcto).
+6. **`l3` (19.528 nulos)**: se imputa con la categoría `"Desconocido"`. En lugar de perder 11,5% de las filas o inventar un barrio, se deja una categoría propia que el One-Hot Encoding trata después como una más.
+7. **Columnas constantes** (`ad_type`, `l1`, `l2`, `operation_type`, `currency`): un solo valor en todo el dataset → se descartan, aportan varianza cero.
+8. **Fechas**: `start_date`, `created_on` y `end_date` se descartan. El dataset cubre 13 meses (jul-2019 a jul-2020) y `end_date` tiene el centinela `9999-12-31` en 28.988 filas (aviso todavía activo): no permiten construir una feature temporal confiable.
+9. **Duplicados**: no hay (ids únicos, 0 filas duplicadas) → nada que hacer.
+10. **Alternativas de la clase que no se usaron** (*Hot Deck*: copiar de registros similares, imputación por regresión, MICE): quedan para un trabajo más avanzado — con 33% de faltantes el imputador se apoyaría en demasiados datos incompletos y el costo/beneficio no justifica la complejidad en este TP.""")
+
+code("""df_ml = df[[
+    "price", "property_type", "l3", "rooms", "bathrooms",
+    "surface_total", "surface_covered", "lat", "lon"
+]].copy()
+
+# 1) Corrección de lat/lon invertidas (detectado en 1a)
+df_ml["lat"], df_ml["lon"] = df_ml["lon"], df_ml["lat"]
+
+# 2) Cobertura por errores de carga imposibles
+mask_error_surface = (df_ml["surface_total"] <= 0) | (df_ml["surface_total"] < 15)
+df_ml.loc[mask_error_surface, "surface_total"] = np.nan
+df_ml.loc[df_ml["surface_covered"] <= 0, "surface_covered"] = np.nan
+
+# 3) Coordenadas: fuera de CABA se eliminan (solo las no nulas), nulas se imputan por barrio
+tiene_coords = df_ml["lat"].notna() & df_ml["lon"].notna()
+fuera = tiene_coords & (~df_ml["lat"].between(-34.71, -34.52) | ~df_ml["lon"].between(-58.54, -58.33))
+print("Filas eliminadas por coordenadas fuera de CABA:", int(fuera.sum()))
+df_ml = df_ml[~fuera]
+
+df_ml["l3"] = df_ml["l3"].fillna("Desconocido")
+df_ml["lat"] = df_ml["lat"].fillna(df_ml.groupby("l3")["lat"].transform("median"))
+df_ml["lon"] = df_ml["lon"].fillna(df_ml.groupby("l3")["lon"].transform("median"))
+
+# 4) Superficies: inconsistencias primero, imputación después
+df_ml.loc[df_ml["surface_covered"] > df_ml["surface_total"], "surface_total"] = df_ml["surface_covered"]
+df_ml.loc[df_ml["surface_total"].isna() & df_ml["surface_covered"].notna(), "surface_total"] = df_ml["surface_covered"]
+
+df_ml["surface_missing"] = df_ml["surface_total"].isna().astype(int)
+df_ml["rooms_missing"] = df_ml["rooms"].isna().astype(int)
+df_ml["bathrooms_missing"] = df_ml["bathrooms"].isna().astype(int)
+
+mediana_tipo = df_ml.groupby("property_type")[["surface_total", "surface_covered", "rooms", "bathrooms"]].transform("median")
+cols_num = ["surface_total", "surface_covered", "rooms", "bathrooms"]
+df_ml[cols_num] = df_ml[cols_num].fillna(mediana_tipo)
+# Queda un residuo si algún tipo de propiedad tiene todas sus superficies ausentes: mediana global
+df_ml[cols_num] = df_ml[cols_num].fillna(df_ml[cols_num].median())
+
+# 5) El target no admite faltantes ni precios imposibles
+df_ml = df_ml[df_ml["price"].notna() & (df_ml["price"] >= 5000)]
+
+print("Filas tras la limpieza:", f"{len(df_ml):,}")
+print("Nulos restantes:", int(df_ml.isna().sum().sum()))
+""")
+
+md("""### b.2) Columnas a descartar o crear
+
+**Se descartan** (además de las de 1a): `bedrooms`, `id`, `ad_type`, `l1`, `l2`, `operation_type`, `currency`, `price_period`, `start_date`, `end_date`, `created_on`.
+
+**Se crean:**
+- `surface_ratio` = `surface_covered` / `surface_total`: proporción construida sobre el terreno. Un valor bajo indica mucho patio/terraza; suele separar casas y PH de departamentos.
+- Las tres columnas indicadoras (`surface_missing`, `rooms_missing`, `bathrooms_missing`).
+
+**No se crean** features derivadas del target. `precio_por_m2 = price / surface_total` parece útil, pero **no es una feature: es el target disfrazado**. Un modelo que la use como predictor memorizaría el precio en lugar de aprender a estimarlo (*data leakage*, fuga de información).""")
+
+code("""df_ml["surface_ratio"] = df_ml["surface_covered"] / df_ml["surface_total"]
+
+df_ml = df_ml[[
+    "price", "property_type", "l3", "rooms", "bathrooms",
+    "surface_total", "surface_covered", "surface_ratio", "lat", "lon",
+    "surface_missing", "rooms_missing", "bathrooms_missing",
+]]
+df_ml.head()""")
+
+md("""### b.3) Outliers
+
+**Método:** rango intercuartílico (IQR, *Interquartile Range*) como criterio principal. El z-score se calcula también, pero con esta distribución sesgada su propio resultado queda contaminado: la media y el desvío estándar los inflan los mismos valores que se quiere detectar (por eso `|z| > 3` marca solo 217 superficies y 2.772 precios, siempre menos de lo que el IQR detecta, porque los extremos agrandan la escala). El IQR usa percentiles y no se desplaza con los extremos.
+
+**Decisiones sobre los que quedan:**
+- **Precio**: los valores fuera del IQR (16.566 filas, 9,9%, con límite superior de 562.500 USD) **se mantienen**. Son propiedades reales (penthouses, casas premium): eliminarlos sesgaría el modelo a la baja y le quitaría precisión justo donde más duele. Sí se eliminaron los precios imposibles (< 5.000 USD) en b.1.
+- **Superficie**: los valores extremos altos (> 2000 m2, 552 filas, 0,3%) **se eliminan**. En CABA no existe una propiedad individual de esas dimensiones salvo casos puntuales; el grueso corresponde a lotes o desarrollos cargados con datos inconsistentes.
+- **Ambientes y baños** (`rooms > 6`, `bathrooms > 4`): se mantienen. Son consistentes con casas grandes, hoteles boutique y PH reciclados, no con errores.""")
+
+code("""def iqr_bounds(s):
+    q1, q3 = s.quantile(.25), s.quantile(.75)
+    return q1 - 1.5 * (q3 - q1), q3 + 1.5 * (q3 - q1)
+
+for col in ["price", "surface_total", "rooms", "bathrooms"]:
+    li, ls = iqr_bounds(df_ml[col])
+    n = int(((df_ml[col] < li) | (df_ml[col] > ls)).sum())
+    print(f"{col:<15} IQR: [{li:,.0f}, {ls:,.0f}]  -> fuera: {n:,} ({n/len(df_ml):.1%})")
+
+antes = len(df_ml)
+df_ml = df_ml[df_ml["surface_total"] <= 2000]
+print(f"Filas eliminadas por superficie > 2000 m2: {antes - len(df_ml):,}")""")
+
+code("""fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+for ax, col in zip(axes, ["price", "surface_total", "rooms"]):
+    sns.boxplot(x=df_ml[col], ax=ax)
+    ax.set_title(f"{col} tras la limpieza")
+    ax.set_xlabel(col)
+plt.tight_layout()
+plt.show()""")
+
+md("""**Observaciones:**
+- El boxplot de precio conserva su cola: es la decisión buscada. Los valores altos son señal, no ruido.
+- `surface_total` quedó acotado a 2000 m2; la caja ahora es legible.
+- `rooms` y `bathrooms` muestran colas cortas y coherentes con el parque inmobiliario.""")
+
+md("""### b.4) Encoding
+
+One-Hot Encoding para las dos categóricas del modelo: `property_type` (10 valores) y `l3` (58 barrios + `Desconocido`). Cada categoría pasa a ser una columna 0/1: así los modelos lineales pueden usarlas sin inventar un orden entre categorías (el error que comete el Label Encoding).
+
+Para la Regresión Lineal conviene eliminar una categoría por variable (`drop_first=True`) para no caer en multicolinealidad perfecta; Random Forest no lo necesita. Acá se usa `drop_first=False` para que los dos modelos reciban la misma matriz y en 1c se evalúa el impacto.""")
+
+code("""df_ml = pd.get_dummies(
+    df_ml,
+    columns=["property_type", "l3"],
+    prefix=["tipo", "barrio"],
+    dtype=int,
+)
+print("Matriz final:", df_ml.shape)
+print("Dummies creadas:", df_ml.shape[1] - 12)
+print("Nulos en la matriz final:", int(df_ml.isna().sum().sum()))
+df_ml.head()""")
+
+md("""### b.5) Otras tareas de limpieza
+
+- **Coordenadas corregidas**: `lat`/`lon` estaban invertidas en el dataset original (1a). Corregido en b.1.
+- **Superficie cubierta mayor que total**: 1.141 filas corregidas (se toma `surface_covered` como piso de `surface_total`).
+- **Centinela `9999-12-31`** en `end_date`: resuelto descartando la columna.
+- **Columnas constantes**: descartadas (`ad_type`, `l1`, `l2`, `operation_type`, `currency`).
+- **Duplicados**: verificados, no hay.
+- **Moneda**: resuelto en 1a filtrando solo USD, que evita mezclar precios en distintas divisas.""")
+
+code("""print("Filas del dataset final:", f"{len(df_ml):,}")
+print("Columnas del dataset final:", df_ml.shape[1])
+print("Nulos:", int(df_ml.isna().sum().sum()))
+df_ml[["price", "rooms", "bathrooms", "surface_total", "surface_covered", "surface_ratio"]].describe().round(2)""")
+
 nb["cells"] = cells
 nb.metadata = {
     "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
