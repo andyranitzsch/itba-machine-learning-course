@@ -126,7 +126,8 @@ Seis gráficos, cada uno con una pregunta distinta:
 | 3 | Boxplot de precio por tipo | ¿Cambia el rango de precios entre tipos? |
 | 4 | Scatter superficie vs precio | ¿Hay relación (semi)lineal? ¿Homocedasticidad? |
 | 5 | Matriz de correlación | ¿Qué numéricas están linealmente relacionadas? |
-| 6 | Mapa geográfico (lat/lon) | ¿El espacio explica precio? |""")
+| 6 | Mapa geográfico (lat/lon) | ¿El espacio explica precio? |
+| 7 | Mediana de precio por barrio (`l3`) | ¿Cuánto explica el barrio, si no entra en la correlación? |""")
 
 md("""### Gráfico 1 — Distribución de precios (histograma, escala logarítmica)
 
@@ -147,7 +148,7 @@ ax.legend()
 plt.tight_layout()
 plt.show()""")
 
-md("""**Qué descubrí:**
+md("""**Observaciones:**
 - Distribución **sesgada a la derecha**: mediana 160.000 USD vs media 285.000 USD. La media es afectada por las pocas propiedades muy caras.
 - Este sesgo es lo esperado en un mercado inmobiliario: pocos inmuebles premium estiran la cola y la masa se concentra en un rango medio.
 - Cola derecha que llega hasta ~30 millones de USD.
@@ -173,7 +174,7 @@ for i, v in enumerate(df["property_type"].value_counts()):
 plt.tight_layout()
 plt.show()""")
 
-md("""**Qué descubrí:**
+md("""**Observaciones:**
 - **Departamento domina**: 100.232 de 169.054 publicaciones (~59%). El dataset está desbalanceado por tipo.
 - `Otro` es la segunda categoría (26.341) pero es una **categoría-vertedero**: no define un tipo de propiedad. Candidata a descarte o a reasignación.
 - `Casa de campo` tiene **5 registros**: no alcanza para aprender nada. Se descarta.
@@ -198,7 +199,7 @@ plt.xticks(rotation=30, ha="right")
 plt.tight_layout()
 plt.show()""")
 
-md("""**Qué descubrí:**
+md("""**Observaciones:**
 - **Medianas muy distintas por tipo**: cochera ~25.000 USD, departamento ~160.000 USD, depósito/lote ~500.000 USD. `property_type` es una feature de primer nivel.
 - **Outliers en todos los tipos**: casi todos superan 1.000.000 USD arriba de su caja. Son en parte reales (penthouses, casas premium) y en parte errores de carga.
 - `Otro` llega a **11 USD**: imposible. O error de carga, o "precio a convenir" cargado como número. Se revisa en el punto 1b.1 (datos mal ingresados).
@@ -233,7 +234,7 @@ ax.legend()
 plt.tight_layout()
 plt.show()""")
 
-md("""**Qué descubrí:**
+md("""**Observaciones:**
 - Relación **positiva pero ruidosa**: a más superficie, más precio, con mucha dispersión.
 - **Heterocedasticidad**: la dispersión del precio crece con la superficie (y con el precio mismo). Esto castiga a la Regresión Lineal en los valores altos.
 - El primer intento de este gráfico fue **ilegible**: un outlier de 63.000 m2 comprimía todo el eje X. Recortar la vista al P99 (percentil 99, línea punteada) hizo visible la forma real. Los outliers siguen existiendo en el dataset: esto es solo una decisión de visualización, no de limpieza.
@@ -257,11 +258,12 @@ ax.set_title("Matriz de correlación (Pearson)")
 plt.tight_layout()
 plt.show()""")
 
-md("""**Qué descubrí:**
+md("""**Observaciones:**
 - `rooms` vs `bedrooms`: **0,91**. Casi la misma información. Para la Regresión Lineal eso es multicolinealidad (coeficientes inestables); conviene quedarse con una o combinarlas. Para Random Forest no molesta tanto.
 - `bathrooms` es la numérica que **más correlaciona con precio (0,53)** — más que superficie.
 - `surface_total`/`surface_covered` correlacionan flojo con precio (0,17 / 0,12): Pearson en crudo los hunde por los outliers extremos y por tener ~55% de nulos. No significa que no sirvan; significa que la relación no es lineal pura.
-- `lat`/`lon` dan ~0 con precio. **No significa que la ubicación no importe**: significa que la relación entre ubicación y precio no es lineal (es espacial). El gráfico 6 lo muestra. (Además, como se descubrió después, esas columnas están invertidas — ver gráfico 6.)""")
+- `lat`/`lon` dan ~0 con precio. **No significa que la ubicación no importe**: significa que la relación entre ubicación y precio no es lineal (es espacial). El gráfico 6 lo muestra. (Además, como se descubrió después, esas columnas están invertidas — ver gráfico 6.)
+- `l3` (barrio) **no aparece en esta matriz por ser categórica**: el coeficiente de correlación de Pearson solo se calcula entre variables numéricas. Su poder predictivo se mide aparte, en el gráfico 7.""")
 
 md("""### Gráfico 6 — Mapa geográfico de precios (lat/lon)
 
@@ -299,10 +301,60 @@ ax.set_aspect("equal")
 plt.tight_layout()
 plt.show()""")
 
-md("""**Qué descubrí:**
+md("""**Observaciones:**
 - **`lat` y `lon` están invertidas en el dataset**: `lat` guarda la longitud (-58.x) y `lon` la latitud (-34.x). Es un error de carga del dataset, no de las publicaciones. Se corrigió renombrando los valores (`lon_real`/`lat_real`). Sin esta corrección, cualquier modelo con coordenadas usaría los ejes al revés.
 - **Hay coordenadas fuera de CABA** incluso tras corregir el swap: se imprimió el % arriba. Sirve como insumo para la limpieza de la parte 1b.
 - Tras corregir, se ve la silueta de CABA. El color no muestra un gradiente fuerte: el precio no depende de lat/lon solamente, sino de **barrio** (`l3`), que es categórica. Eso sugiere usar `l3` (o los centroides por barrio) como feature en vez de confiar en una relación lineal con las coordenadas.""")
+
+md("""### Gráfico 7 — Mediana de precio por barrio (`l3`)
+
+**Por qué:** `l3` es categórica, así que no entra en la matriz de correlación; aun así, el barrio es el predictor territorial clásico. Se compara la mediana de precio por barrio y se cuantifica su poder con el *correlation ratio* (η², η cuadrado): el equivalente de la correlación para una variable categórica contra una numérica, con valores entre 0 y 1.
+
+**Qué espero descubrir:** si las medianas difieren mucho entre barrios, `l3` será una feature fuerte para la Parte 2.""")
+
+code("""# Mediana de precio por barrio. Se filtra por cantidad para evitar barrios con 1-2 publicaciones.
+precio_por_barrio = df.groupby("l3")["price"].agg(["median", "count"])
+top_barrios = precio_por_barrio[precio_por_barrio["count"] >= 50].sort_values("median", ascending=False)
+
+fig, ax = plt.subplots(figsize=(10, 8))
+top_barrios.head(15)["median"].sort_values().plot.barh(ax=ax, color="steelblue")
+ax.set_title("Mediana de precio (USD) por barrio — 15 más caros con al menos 50 publicaciones")
+ax.set_xlabel("Mediana del precio (USD)")
+ax.set_ylabel("")
+for i, v in enumerate(top_barrios.head(15)["median"].sort_values()):
+    ax.text(v * 1.02, i, f"{v:,.0f}", va="center", fontsize=8)
+plt.tight_layout()
+plt.show()
+
+# Correlation ratio (eta^2): cuánto de la varianza del precio explica el barrio
+media_global = df["price"].mean()
+grupos = df.groupby("l3")["price"]
+ss_between = sum(len(g) * (g.mean() - media_global) ** 2 for _, g in grupos)
+ss_total = ((df["price"] - media_global) ** 2).sum()
+print(f"Correlation ratio eta^2 (l3 -> price): {ss_between / ss_total:.3f}")
+
+# El eta^2 crudo lo distorsionan los outliers; se repite en escala logarítmica
+log_price = np.log10(df["price"])
+media_log = log_price.mean()
+ss_between_log = sum(
+    len(pr) * (np.log10(pr).mean() - media_log) ** 2
+    for _, pr in df.groupby("l3")["price"]
+)
+ss_total_log = ((log_price - media_log) ** 2).sum()
+print(f"Correlation ratio eta^2 (l3 -> log10(price)): {ss_between_log / ss_total_log:.3f}")
+print(f"Barrios evaluados (>= 50 publicaciones): {len(top_barrios)}")
+print(f"Razón mediana max/min: {top_barrios['median'].iloc[0] / top_barrios['median'].iloc[-1]:.1f}x")
+print()
+print("3 barrios más caros y 3 más baratos (mediana, cantidad):")
+print(top_barrios[["median", "count"]].head(3))
+print(top_barrios[["median", "count"]].tail(3))
+""")
+
+md("""**Observaciones:**
+- Las medianas difieren mucho entre barrios: **7,4x** entre el más caro (Puerto Madero, 700.000 USD) y el más barato (Villa Lugano, 95.000 USD). El barrio pesa.
+- El *correlation ratio* en escala cruda da solo **0,047**: la varianza del precio está dominada por los outliers (media sensible). Calculado sobre `log10(price)` sube a **0,096**: el barrio explica ~10% de la varianza transformada, más información que cualquier numérica suelta del heatmap.
+- Parque Patricios aparece con mediana alta (215.000 USD, por encima de lo esperable para la zona): mezcla desarrollos nuevos y lotes. Revisar junto a `surface_*` en la Parte 1b.
+- En una misma ciudad conviven mercados con precios 7x distintos: `l3` es candidata de primera línea para One-Hot Encoding en la Parte 1b.""")
 
 nb["cells"] = cells
 nb.metadata = {
