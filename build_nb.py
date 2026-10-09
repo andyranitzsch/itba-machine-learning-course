@@ -531,6 +531,44 @@ print("Columnas del dataset final:", df_ml.shape[1])
 print("Nulos:", int(df_ml.isna().sum().sum()))
 df_ml[["price", "rooms", "bathrooms", "surface_total", "surface_covered", "surface_ratio"]].describe().round(2)""")
 
+md("""---
+
+## Parte 1 c) — Descripción de los datos
+
+### Qué descubrí del dataset
+
+- **Alcance**: de 992.192 publicaciones originales se trabajan las **166.652** de Capital Federal, operación Venta y moneda USD, con **80 features**: 6 numéricas de entrada, coordenadas, 3 indicadoras de imputación, 68 columnas One-Hot (tipo de propiedad y barrio). Cero nulos en la matriz final.
+- **El mercado segmentado manda**: el target tiene mediana de 160.000 USD y media de 285.000 USD (sesgo esperado en un mercado inmobiliario: ~10% de las propiedades supera el límite superior del IQR, 562.500 USD). El tipo de propiedad separa rangos que casi no se solapan, y el barrio es la señal territorial más fuerte: 7,4x entre la mediana de Puerto Madero y la de Villa Lugano.
+- **Las features físicas importan, con ruido**: superficie, ambientes y baños correlacionan positivamente con el precio, pero con heterocedasticidad (la dispersión crece con el valor). La lat/lon lineal pesa poco; el barrio como categoría pesa más.
+- **La calidad de los datos era baja y dirigió las decisiones**: `lat`/`lon` invertidas, monedas mezcladas (8.057 registros descartados), textos con *encoding* dañado, centinela `9999-12-31` en `end_date`, columnas constantes y sub-barrio (`l4`) con cobertura sesgada.
+- **Faltanza masiva**: el 33% de las filas no tenía ninguna superficie. La mediana por tipo de propiedad preservó esas filas, con el costo conocido (reduce varianza); las columnas `*_missing` conservan el patrón de ausencia.
+
+### Métrica para evaluar los modelos
+
+**Métrica principal: MAE — *Mean Absolute Error*, error absoluto medio.** Como se ve en la Clase 5, es el promedio de las diferencias absolutas entre predicción y valor real, y queda expresado **en las unidades del target** (USD). Tres razones para elegirla:
+
+1. **El target es sesgado con cola larga**. MSE y RMSE elevan los errores al cuadrado: una propiedad de 30M mal predicha pesa como cientos de departamentos estándar. MAE mide en USD reales y no premia castigar a los inmuebles premium.
+2. **Interpretabilidad de negocio**. Un MAE de 40.000 USD responde *"en promedio, el modelo se equivoca por 40.000 dólares"* — lo que un vendedor o tasador entiende directo.
+3. **Coherencia con el resto**: la clase define MAE, RMSE y R²; usar la principal que mejor respeta la distribución y luego las otras como referencia mantiene la comparación entre modelos consistente.
+
+**Secundarias**: **RMSE** (penaliza los errores grandes; útil para ver si el modelo falla justo en las propiedades caras, que conservamos en 1b) y **R²** — *coeficiente de determinación*, variabilidad explicada — para comparar el modelo contra la línea de base sin información calculada arriba (predecir siempre la mediana, R² = 0 por definición).
+
+**Nota de evaluación**: la misma métrica se usa en validación (dentro de `GridSearchCV`) y en test, y si en la Parte 2 se prueba `log(price)`, el MAE se reporta **des-transformado a USD** para que los modelos sean comparables.""")
+
+code("""# Magnitud de referencia: cuánto se equivoca un modelo sin información,
+# que siempre predice la mediana y otro que siempre predice la media.
+from sklearn.metrics import mean_absolute_error, mean_squared_error
+
+y = df_ml["price"]
+pred_mediana = pd.Series(y.median(), index=y.index)
+pred_media = pd.Series(y.mean(), index=y.index)
+
+print(f"MAE predecir siempre la mediana: {mean_absolute_error(y, pred_mediana):,.0f} USD")
+print(f"MAE predecir siempre la media:  {mean_absolute_error(y, pred_media):,.0f} USD")
+print(f"MSE del predictor de mediana:    {mean_squared_error(y, pred_mediana):,.0f}")
+print("-> Cualquier modelo debe bajar de estos valores de referencia.")
+""")
+
 nb["cells"] = cells
 nb.metadata = {
     "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
